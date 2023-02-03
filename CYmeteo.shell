@@ -1,0 +1,366 @@
+#!/bin/bash
+if [ ! -f meteo ]; then
+	make
+fi
+
+debut="2000-01-05" #Date par défaut de début
+fin="2100-12-31" #Date par défaut de fin
+valid="False" #Vérificcation si au moins un argument est valid
+loca1=0 #Identifiants par défaut des stations pour la localisation
+loca2=100000
+methode=0 #Méthode de tri par défaut (AVL)
+validfinal="False" #Vérification si un fichier a bien été entré après -f
+
+for i in $(seq 1 $#); do
+	key="${!i}"
+	case $key in	#Pour chaque argument on vérifie ce qu'il signifie
+		-f) #Fichier
+			((i++))
+			if [ -f "${!i}" ]; then
+				file="${!i}"
+				validfinal="True"
+			fi
+		;;
+		-p1) #Pression 1
+			Press1="True"
+			valid="True" #Au moins un argument est valide, ce qui va permettre l'affichage
+		;;
+		-p2) #Pression 2
+			Press2="True"
+			valid="True"
+		;;
+		-p3) #Pression 3
+			Press3="True"
+			valid="True"
+		;;
+		-t1) #Température 1
+			Temp1="True"
+			valid="True"
+		;;
+		-t2) #Température 2
+			Temp2="True"
+			valid="True"
+		;;
+		-t3) #Température 3
+			Temp3="True"
+			valid="True"
+		;;
+		-w) #Vent
+			Vent="True"
+			valid="True"
+		;;
+		-h) #Altitude
+			Altitude="True"
+			valid="True"
+		;;
+		-m) #Humidité
+			Humid="True"
+			valid="True"
+		;;
+		-d) #Dates
+			((i++)) #On prend argument suivant
+			if [[ "${!i}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then #Vérification du format de la date avec [plage de chaque chiffre]{nombre de chiffres}
+				debut=${!i} #Date de début deviens l'argument
+			fi
+			((i++))
+			if [[ "${!i}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then #Vérification du format de la date avec [plage de chaque chiffre]{nombre de chiffres}
+				fin=${!i}
+			fi
+		;;
+		-F) #France
+			loca1=0
+			loca2=8000
+		;;
+		-G) #Guyane
+			loca1=80000
+			loca2=85000
+		;;
+		-S) #Saint-Pierre et Miquelon
+			loca1=70000
+			loca2=72000
+		;;
+		-A) #Antilles
+			loca1=78000
+			loca2=79000
+		;;
+		-O) #Océan indien
+			loca1=61000
+			loca2=68000
+		;;
+		-Q) #Antarctique
+			loca1=89000
+			loca2=100000
+		;;
+		--avl)
+			methode=0
+		;;
+		--abr)
+			methode=1
+		;;
+		--tab)
+			methode=2
+		;;
+		--help) #Aide
+			echo -e "\nUtilisation : ./CYmeteo.shell [OPTIONS] -f [FICHIER] 
+But : Permet de traiter les données météorologiques d'un fichier csv en fonction de divers options obligatoires ou facultatives
+Options obligatoires (Au moins une est nécessaire) :
+	-t<mode> Affiche la température suivant le mode entré :
+		1 : Températures moyennes, maximales et minimales par station
+		2 : Températures moyennes dans le temps
+		3 : Températures moyennes par station par heure (chaque heure de la journée) dans le temps
+	-p<mode> Affiche la pression suivant le mode entré : 
+		1 : Pressions moyennes, maximales et minimales par station
+		2 : Pressions moyennes dans le temps
+		3 : Pressions moyennes par station par heure (chaque heure de la journée) dans le temps
+	-w Affiche une carte des vents
+	-h Affiche une carte des altitudes
+	-m Affiche une carte de l'humidité maximale
+Options facultatives :
+	-d AAAA-MM-JJ AAAA-MM-JJ Sélectionne une période avec une date de début dans le format AAAA-MM-JJ puis de fin
+	Localisation : Sélectionne une zone géographique : 
+		-F : France métropolitaine et Corse
+		-G : Guyane française
+		-S : Saint-Pierre et Miquelon
+		-A : Antilles
+		-O : Océan Indien
+		-Q : Antarctique
+	Mode de tri des données : 
+		--avl : tri à l'aide d'un arbre binaire de recherche équilibré
+		--abr : tri à l'aide d'un arbre binaire de recherche simple
+		--tab : tri à l'aide d'une liste chaînée"
+		;;
+		*)
+			#Ne fait rien par défaut, le programme n'affichera juste rien
+		;;
+	esac
+done
+
+if [[ $Temp1 == "True" && $validfinal=="True" ]]; then	#Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f){print $1 ";" $11 ";" $12 ";" $13}' > entree.csv
+	./meteo entree.csv 0 $methode
+	case $? in
+		0) #Si aucune erreur dans le c
+			gnuplot scriptgnutemp1.plt #Affichage
+			rm entree.csv #Supprime le fichier créé par le shell
+			rm sortie.txt #Supprime le fichier créé par le c
+		;;
+		1) #Si le programme c retourne 1
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2) #Si le programme c retourne 2
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3) #Si le programme c retourne 3
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4) #Si le programme c retourne 4
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Temp2 == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 meteo_filtered_data_v1.csv | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f){print $2 ";" $11}' > entree.csv
+	./meteo entree.csv 1 $methode
+	case $? in
+		0)
+			gnuplot scriptgnutemp2.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Temp3 == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f){print $1 ";" $2 ";" $11}' > entree.csv
+	mkdir tempstation #Dossier temporaire pour stocker les fichiers individuels des stations
+	chmod 777 tempstation #Pas nécessaire je crois à supprimer
+	./meteo entree.csv 2 $methode
+	case $? in
+		0)
+			gnuplot scriptgnutemp3.plt
+			rm entree.csv
+			rm -r tempstation	#Elimination du dossier temporaire et avec lui tous les fichiers individuels
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Press1 == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f && $7 != ""){print $1 ";" $7 ";" $7 ";" $7}' > entree.csv
+	./meteo entree.csv 0 $methode
+	case $? in
+		0)
+			gnuplot scriptgnutemp1.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Press2 == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f && $7 != ""){print $2 ";" $7}' > entree.csv
+	./meteo entree.csv 1 $methode
+	case $? in
+		0)
+			gnuplot scriptgnutemp2.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Press3 == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f && $7 != ""){print $1 ";" $2 ";" $7}' > entree.csv
+	mkdir tempstation #Dossier temporaire pour stocker les fichiers individuels des stations
+	chmod 777 tempstation #Pas nécessaire je crois à supprimer
+	./meteo entree.csv 2 $methode
+	case $? in
+		0)
+			gnuplot scriptgnutemp3.plt
+			rm entree.csv
+			rm -r tempstation	#Elimination du dossier temporaire et avec lui tous les fichiers individuels
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Vent == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f && $4 != "" && $5 != "") {print $1 ";" $4 ";" $5 ";" $10}' > entree.csv #On prends que si toutes les données sont remplies
+	./meteo entree.csv 6 $methode
+	case $? in
+		0)
+			gnuplot scriptgnuvent.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Altitude == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f){print $1 ";" $10 ";" $14}' > entree.csv
+	./meteo entree.csv 7 $methode
+	case $? in
+		0)
+			gnuplot scriptgnualtitude.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $Humid == "True" && $validfinal=="True" ]]; then #Si l'argument correspondant et que le fichier est valide
+	tail -n +2 $file | awk -v locad="$loca1" -v locaf="$loca2" -v d="$debut" -v f="$fin" -F ";" '($1 >= locad && $1 <= locaf && $2 >= d && $2 <= f && $6 != ""){print $1 ";" $6 ";" $10}' > entree.csv
+	./meteo entree.csv 8 $methode
+	case $? in
+		0)
+			gnuplot scriptgnuhumid.plt
+			rm entree.csv
+			rm sortie.txt
+		;;
+		1)
+			echo "Erreur dans les arguments du programme c"
+		;;
+		2)
+			echo "Erreur dans le fichier d'entrée"
+		;;
+		3)
+			echo "Erreur dans le fichier de sortie"
+		;;
+		4)
+			echo "Erreur d'exécution interne"
+		;;
+	esac
+fi
+
+if [[ $valid == "False" ]]; then
+	echo "Aucun argument valide n'a été entré"
+fi
+
+if [[ $validfinal == "False" ]]; then
+	echo "Le fichier entré n'est pas valide"
+fi
+
+make clean
